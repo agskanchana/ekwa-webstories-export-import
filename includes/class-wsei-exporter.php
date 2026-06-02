@@ -185,6 +185,29 @@ class Exporter {
 		// Prepare the ZIP.
 		$tmp_dir = self::temp_dir();
 		wp_mkdir_p( $tmp_dir );
+
+		// Bail early if the disk is nearly full — otherwise ZipArchive would
+		// write a truncated (corrupt) archive. Estimate need from the assets.
+		$needed = 0;
+		foreach ( array_keys( $asset_ids ) as $aid ) {
+			$f = get_attached_file( (int) $aid );
+			if ( $f && file_exists( $f ) ) {
+				$needed += (int) filesize( $f );
+			}
+		}
+		$free = @disk_free_space( $tmp_dir );
+		if ( false !== $free && $needed > 0 && $free < ( $needed * 1.2 + 10 * MB_IN_BYTES ) ) {
+			return new \WP_Error(
+				'low_disk',
+				sprintf(
+					/* translators: 1: needed size, 2: free size */
+					__( 'Not enough free disk space to build this batch (needs ~%1$s, only %2$s free). Free up space, or use a smaller batch size and download/move each ZIP before building more.', 'ekwa-wsei' ),
+					size_format( $needed ),
+					size_format( $free )
+				)
+			);
+		}
+
 		$zip_filename = 'web-stories-export-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 6, false, false ) . '.zip';
 		$zip_path     = $tmp_dir . '/' . $zip_filename;
 
@@ -209,11 +232,39 @@ class Exporter {
 			'Stories: ' . count( $manifest['stories'] ) . ', Assets: ' . count( $manifest['assets'] ) . "\n"
 		);
 
-		$zip->close();
+		// IMPORTANT: ZipArchive writes deferred file data here. A failure (e.g.
+		// disk full, locked source file) means a truncated/corrupt ZIP, so we
+		// must check the result instead of reporting a false success.
+		if ( ! $zip->close() ) {
+			@unlink( $zip_path );
+			return new \WP_Error(
+				'zip_close_failed',
+				__( 'The export ZIP could not be finalised (the disk may be full or a media file was unreadable). Try a smaller batch size.', 'ekwa-wsei' )
+			);
+		}
+
+		// Verify the finished archive really is a valid, complete ZIP. NOTE: in
+		// PHP 8+, calling close() on a ZipArchive whose open() failed throws a
+		// ValueError (and "@" does not suppress thrown errors), so only close
+		// when the archive actually opened.
+		$verify   = new \ZipArchive();
+		$opened   = ( true === $verify->open( $zip_path, \ZipArchive::CHECKCONS ) );
+		$has_mani = $opened && ( false !== $verify->locateName( 'manifest.json' ) );
+		if ( $opened ) {
+			$verify->close();
+		}
+		if ( ! $has_mani ) {
+			@unlink( $zip_path );
+			return new \WP_Error(
+				'zip_corrupt',
+				__( 'The export ZIP failed an integrity check and was discarded. Try a smaller batch size.', 'ekwa-wsei' )
+			);
+		}
 
 		return array(
 			'path'     => $zip_path,
 			'filename' => $zip_filename,
+			'size'     => filesize( $zip_path ),
 			'stories'  => count( $manifest['stories'] ),
 			'assets'   => count( $manifest['assets'] ),
 		);
@@ -249,7 +300,11 @@ class Exporter {
 	}
 
 	/**
-	 * Stream a previously-built temp ZIP to the browser, then delete it.
+	 * Stream a previously-built temp ZIP to the browser.
+	 *
+	 * The file is intentionally NOT deleted after streaming, so a download that
+	 * gets truncated (e.g. by the browser when several start at once) can simply
+	 * be clicked again. Old files are swept by cleanup_temp() instead.
 	 *
 	 * @param string $filename Basename of the temp ZIP (no path).
 	 * @return \WP_Error|void Returns WP_Error on failure; otherwise exits.
@@ -262,21 +317,35 @@ class Exporter {
 		}
 		$path = self::temp_dir() . '/' . $filename;
 		if ( ! file_exists( $path ) ) {
-			return new \WP_Error( 'not_found', __( 'That export file has expired or was already downloaded. Please rebuild the batch.', 'ekwa-wsei' ) );
+			return new \WP_Error( 'not_found', __( 'That export file has expired. Please rebuild the batch.', 'ekwa-wsei' ) );
+		}
+
+		$size = filesize( $path );
+
+		// Make sure nothing mangles the binary stream.
+		@ini_set( 'zlib.output_compression', 'Off' );
+		@set_time_limit( 0 );
+		while ( ob_get_level() ) {
+			ob_end_clean();
 		}
 
 		nocache_headers();
 		header( 'Content-Type: application/zip' );
 		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
-		header( 'Content-Length: ' . filesize( $path ) );
+		header( 'Content-Length: ' . $size );
+		header( 'Accept-Ranges: none' );
 		header( 'X-Content-Type-Options: nosniff' );
 
-		while ( ob_get_level() ) {
-			ob_end_clean();
+		// Stream in chunks rather than readfile() so large bundles transfer
+		// reliably without buffering the whole file.
+		$handle = fopen( $path, 'rb' );
+		if ( false !== $handle ) {
+			while ( ! feof( $handle ) ) {
+				echo fread( $handle, 1024 * 1024 ); // 1 MB chunks.
+				flush();
+			}
+			fclose( $handle );
 		}
-
-		readfile( $path );
-		@unlink( $path );
 		exit;
 	}
 

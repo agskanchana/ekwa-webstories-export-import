@@ -130,12 +130,9 @@
 				buttons.forEach( function ( b ) {
 					b.disabled = false;
 				} );
-				status.textContent = sprintf( cfg.i18n.done, batches.length );
-				if ( builtUrls.length > 1 ) {
+				status.textContent = sprintf( cfg.i18n.done, builtUrls.length );
+				if ( builtUrls.length > 0 ) {
 					downloadAllBtn.hidden = false;
-				} else if ( builtUrls.length === 1 ) {
-					// Single batch: just download it immediately.
-					triggerDownload( builtUrls[ 0 ] );
 				}
 				return;
 			}
@@ -163,6 +160,11 @@
 						var d = res.data;
 						builtUrls.push( d.downloadUrl );
 						addDownloadRow( list, index + 1, d );
+						// Download each batch as soon as it is built. Because the
+						// builds are seconds apart, the transfers do not overlap
+						// (which is what truncated/corrupted the later ZIPs when
+						// all downloads fired at once).
+						triggerDownload( d.downloadUrl );
 					} else {
 						var msg = res && res.data && res.data.message ? res.data.message : 'error';
 						addErrorRow( list, index + 1, msg );
@@ -172,17 +174,22 @@
 					addErrorRow( list, index + 1, String( err ) );
 				} )
 				.finally( function () {
-					buildBatch( index + 1 );
+					// Small gap between batches keeps downloads from overlapping.
+					setTimeout( function () {
+						buildBatch( index + 1 );
+					}, 600 );
 				} );
 		}
 
 		buildBatch( 0 );
 
+		// Manual "download all again" for any transfer that got interrupted.
+		// Files stay on the server for ~2 hours, so re-clicking always works.
 		downloadAllBtn.onclick = function () {
 			builtUrls.forEach( function ( url, i ) {
 				setTimeout( function () {
 					triggerDownload( url );
-				}, i * 1200 );
+				}, i * 2000 );
 			} );
 		};
 	}

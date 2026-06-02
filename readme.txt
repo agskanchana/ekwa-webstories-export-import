@@ -4,7 +4,7 @@ Tags: web stories, web-stories, export, import, migration, amp
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -113,6 +113,16 @@ if the repo is made private), define a token in wp-config.php:
 `define( 'EKWA_WSEI_GITHUB_TOKEN', 'ghp_yourtoken' );`
 
 == Changelog ==
+
+= 1.2.1 =
+* Fixed corrupted batch ZIPs when exporting many batches. Builds are now
+  integrity-checked (ZipArchive close() result + a re-open consistency check)
+  so a truncated archive is reported as a failed batch instead of a false
+  success, with a disk-space pre-check.
+* Each batch now downloads automatically right after it is built (one at a time)
+  instead of firing all downloads at once, which was truncating the later ZIPs.
+* Built ZIPs are kept on the server for ~2 hours and are no longer deleted on
+  first download, so an interrupted download can simply be clicked again.
 
 = 1.2.0 =
 * Added self-hosted updates from GitHub via the bundled Plugin Update Checker

@@ -150,9 +150,9 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 					<p class="ekwa-wsei-progress-status"></p>
 					<ul id="ekwa-wsei-export-downloads" class="ekwa-wsei-downloads"></ul>
 					<p>
-						<button type="button" class="button button-primary" id="ekwa-wsei-download-all" hidden><?php esc_html_e( 'Download all batches', 'ekwa-wsei' ); ?></button>
+						<button type="button" class="button" id="ekwa-wsei-download-all" hidden><?php esc_html_e( 'Re-download all batches', 'ekwa-wsei' ); ?></button>
 					</p>
-					<p class="description"><?php esc_html_e( 'Tip: keep this tab open until all batches are downloaded. Then go to the new site and import all the ZIPs together on the Import tab.', 'ekwa-wsei' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Each batch downloads automatically as soon as it is built (one at a time, so transfers do not collide). Keep this tab open until all batches finish. If a download looks incomplete or your browser blocked it, just click its link above again — each ZIP stays on the server for ~2 hours. Then import all the ZIPs together on the Import tab of the new site.', 'ekwa-wsei' ); ?></p>
 				</div>
 			<?php endif; ?>
 		</div>

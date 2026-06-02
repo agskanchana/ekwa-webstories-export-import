@@ -101,7 +101,7 @@ class Plugin {
 				'nonce'        => wp_create_nonce( self::NONCE_BATCH ),
 				'i18n'         => array(
 					'building'   => __( 'Building batch %1$d of %2$d…', 'ekwa-wsei' ),
-					'done'       => __( 'All %d batches built. Click each link below to download (they expire in ~2 hours).', 'ekwa-wsei' ),
+					'done'       => __( 'Done — %d batch(es) built and downloaded. If any download looks incomplete, click its link below to fetch it again (files stay for ~2 hours).', 'ekwa-wsei' ),
 					'failed'     => __( 'Batch %1$d failed: %2$s', 'ekwa-wsei' ),
 					'batchLabel' => __( 'Batch %1$d — %2$d stories, %3$d assets', 'ekwa-wsei' ),
 					'download'   => __( 'Download', 'ekwa-wsei' ),
