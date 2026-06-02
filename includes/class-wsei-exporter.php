@@ -94,22 +94,58 @@ class Exporter {
 			return $result;
 		}
 
-		$zip_path = $result['path'];
-		$filename = $result['filename'];
+		$this->stream_download( $result['path'], $result['filename'], true );
+	}
 
-		nocache_headers();
-		header( 'Content-Type: application/zip' );
-		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
-		header( 'Content-Length: ' . filesize( $zip_path ) );
-		header( 'X-Content-Type-Options: nosniff' );
+	/**
+	 * Stream a file as a binary download, defeating zlib output compression and
+	 * buffering so the ZIP arrives intact. Exits when done.
+	 *
+	 * @param string $path     Absolute file path.
+	 * @param string $filename Download filename.
+	 * @param bool   $delete   Delete the file after streaming.
+	 * @return void
+	 */
+	private function stream_download( $path, $filename, $delete = false ) {
+		// Stop the server from gzip-compressing the binary ZIP, which would make
+		// the declared Content-Length wrong and truncate/corrupt the download.
+		@ini_set( 'zlib.output_compression', 'Off' );
+		@ini_set( 'output_buffering', 'Off' );
+		if ( function_exists( 'apache_setenv' ) ) {
+			@apache_setenv( 'no-gzip', '1' );
+		}
+		@set_time_limit( 0 );
 
-		// Flush any buffered output so it does not corrupt the binary stream.
 		while ( ob_get_level() ) {
 			ob_end_clean();
 		}
 
-		readfile( $zip_path );
-		@unlink( $zip_path );
+		$size           = (int) @filesize( $path );
+		$compression_on = (bool) ini_get( 'zlib.output_compression' );
+
+		nocache_headers();
+		header( 'Content-Type: application/zip' );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+		header( 'X-Content-Type-Options: nosniff' );
+		header( 'Accept-Ranges: none' );
+		// Only advertise a length if the bytes will NOT be recompressed; with
+		// compression still forced on, a fixed length would truncate the file.
+		if ( ! $compression_on && $size > 0 ) {
+			header( 'Content-Length: ' . $size );
+		}
+
+		$handle = fopen( $path, 'rb' );
+		if ( false !== $handle ) {
+			while ( ! feof( $handle ) ) {
+				echo fread( $handle, 1024 * 1024 ); // 1 MB chunks.
+				flush();
+			}
+			fclose( $handle );
+		}
+
+		if ( $delete ) {
+			@unlink( $path );
+		}
 		exit;
 	}
 
@@ -338,33 +374,8 @@ class Exporter {
 			return new \WP_Error( 'not_found', __( 'That export file has expired. Please rebuild the batch.', 'ekwa-wsei' ) );
 		}
 
-		$size = filesize( $path );
-
-		// Make sure nothing mangles the binary stream.
-		@ini_set( 'zlib.output_compression', 'Off' );
-		@set_time_limit( 0 );
-		while ( ob_get_level() ) {
-			ob_end_clean();
-		}
-
-		nocache_headers();
-		header( 'Content-Type: application/zip' );
-		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
-		header( 'Content-Length: ' . $size );
-		header( 'Accept-Ranges: none' );
-		header( 'X-Content-Type-Options: nosniff' );
-
-		// Stream in chunks rather than readfile() so large bundles transfer
-		// reliably without buffering the whole file.
-		$handle = fopen( $path, 'rb' );
-		if ( false !== $handle ) {
-			while ( ! feof( $handle ) ) {
-				echo fread( $handle, 1024 * 1024 ); // 1 MB chunks.
-				flush();
-			}
-			fclose( $handle );
-		}
-		exit;
+		// Keep the file (do not delete) so an interrupted download is retryable.
+		$this->stream_download( $path, $filename, false );
 	}
 
 	/**

@@ -305,6 +305,9 @@ class Plugin {
 		check_admin_referer( self::NONCE_IMPORT );
 
 		$importer = new Importer();
+		// Low-memory mode (default ON): skip thumbnail regeneration, which is the
+		// usual cause of fatal out-of-memory crashes during import.
+		$importer->set_low_memory( ! empty( $_POST['low_memory'] ) );
 		$server_path = isset( $_POST['server_path'] ) ? sanitize_text_field( wp_unslash( $_POST['server_path'] ) ) : '';
 
 		// Top-level safety net: turn any catchable error/exception during import

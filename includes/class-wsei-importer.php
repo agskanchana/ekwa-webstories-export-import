@@ -45,6 +45,25 @@ class Importer {
 	private $warnings = array();
 
 	/**
+	 * When true, skip thumbnail/sub-size regeneration (which loads full images
+	 * into memory and can fatally exhaust memory on small hosts). Every image
+	 * size is mapped to the full-size file instead.
+	 *
+	 * @var bool
+	 */
+	private $low_memory = false;
+
+	/**
+	 * Enable/disable low-memory mode.
+	 *
+	 * @param bool $on Whether to skip thumbnail regeneration.
+	 * @return void
+	 */
+	public function set_low_memory( $on ) {
+		$this->low_memory = (bool) $on;
+	}
+
+	/**
 	 * De-dup table: "sourceSite|oldAttachmentId" => new attachment id.
 	 * Lets shared assets (e.g. the publisher logo) be imported once across a
 	 * multi-batch import instead of duplicated in every batch.
@@ -466,12 +485,31 @@ class Importer {
 			}
 		}
 
-		// Regenerate intermediate sizes / metadata for the new file.
-		$new_meta = wp_generate_attachment_metadata( $new_id, $new_file );
-		if ( is_array( $new_meta ) ) {
+		if ( $this->low_memory ) {
+			// Low-memory mode: DO NOT call wp_generate_attachment_metadata() —
+			// that loads the full image into memory (GD) and is what fatally
+			// exhausts memory on small hosts. Store minimal metadata (no sub
+			// sizes) reusing the dimensions captured at export time. Every image
+			// size will be remapped to the full-size file (which exists).
+			$exported = isset( $asset['metadata'] ) && is_array( $asset['metadata'] ) ? $asset['metadata'] : array();
+			$new_meta = array(
+				'file'   => _wp_relative_upload_path( $new_file ),
+				'width'  => isset( $exported['width'] ) ? (int) $exported['width'] : 0,
+				'height' => isset( $exported['height'] ) ? (int) $exported['height'] : 0,
+				'sizes'  => array(),
+			);
+			if ( isset( $exported['image_meta'] ) ) {
+				$new_meta['image_meta'] = $exported['image_meta'];
+			}
 			wp_update_attachment_metadata( $new_id, $new_meta );
 		} else {
-			$new_meta = array();
+			// Regenerate intermediate sizes / metadata for the new file.
+			$new_meta = wp_generate_attachment_metadata( $new_id, $new_file );
+			if ( is_array( $new_meta ) ) {
+				wp_update_attachment_metadata( $new_id, $new_meta );
+			} else {
+				$new_meta = array();
+			}
 		}
 
 		// Stamp the source so this asset can be reused on a later separate import.
@@ -597,11 +635,16 @@ class Importer {
 			$old_prefix_esc = str_replace( '/', '\/', $old_prefix );
 			$new_prefix_esc = str_replace( '/', '\/', $new_prefix );
 
+			// Normally keep the "-WxH" suffix (maps to the regenerated size). In
+			// low-memory mode there are no sub-sizes, so drop the suffix and send
+			// every variant to the full-size file (which exists).
+			$suffix = $this->low_memory ? '' : '$1';
+
 			$this->regex_rules[] = array(
 				'pattern'     => '#' . preg_quote( $old_prefix, '#' ) . '(-\d+x\d+)?\.' . preg_quote( $old_ext, '#' ) . '#i',
-				'replace'     => str_replace( '\\', '\\\\', $new_prefix ) . '$1.' . $new_ext,
+				'replace'     => str_replace( '\\', '\\\\', $new_prefix ) . $suffix . '.' . $new_ext,
 				'pattern_esc' => '#' . preg_quote( $old_prefix_esc, '#' ) . '(-\d+x\d+)?\.' . preg_quote( $old_ext, '#' ) . '#i',
-				'replace_esc' => str_replace( '\\', '\\\\', $new_prefix_esc ) . '$1.' . $new_ext,
+				'replace_esc' => str_replace( '\\', '\\\\', $new_prefix_esc ) . $suffix . '.' . $new_ext,
 			);
 		}
 	}

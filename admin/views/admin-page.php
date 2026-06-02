@@ -197,6 +197,16 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 							<p class="description"><?php esc_html_e( 'Absolute path to a ZIP already on this server. Leave blank if you used the upload field.', 'ekwa-wsei' ); ?></p>
 						</td>
 					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Memory', 'ekwa-wsei' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="low_memory" value="1" checked />
+								<?php esc_html_e( 'Low-memory mode (recommended) — do not regenerate thumbnails', 'ekwa-wsei' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'Keep this ON if importing has caused a "critical error". Thumbnail regeneration loads full images into memory and is the usual cause of out-of-memory crashes on shared hosting. With this ON the full-size images are used everywhere (stories still display correctly). Turn it OFF only if your server has plenty of memory and you want WordPress to regenerate every image size.', 'ekwa-wsei' ); ?></p>
+						</td>
+					</tr>
 				</table>
 
 				<p class="submit">

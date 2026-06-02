@@ -4,7 +4,7 @@ Tags: web stories, web-stories, export, import, migration, amp
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.2.5
+Stable tag: 1.2.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -115,6 +115,16 @@ if the repo is made private), define a token in wp-config.php:
 `define( 'EKWA_WSEI_GITHUB_TOKEN', 'ghp_yourtoken' );`
 
 == Changelog ==
+
+= 1.2.6 =
+* Fixes the "critical error" (fatal out-of-memory) during import. Added a
+  Low-memory mode (ON by default): import no longer regenerates thumbnails —
+  the step that loads full images into memory and crashes small hosts. The
+  full-size image is used for every size instead, so stories still display.
+  Uncheck it only on servers with plenty of memory.
+* ZIP downloads now defeat zlib output compression and omit a fixed
+  Content-Length when the host forces compression, preventing corrupted/empty
+  downloads.
 
 = 1.2.5 =
 * New: "Export this story" button on every row exports a single post as a ZIP
