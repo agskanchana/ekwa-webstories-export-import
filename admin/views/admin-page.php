@@ -53,7 +53,7 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 					echo ' ' . esc_html(
 						sprintf(
 							/* translators: %d: number of reused assets */
-							_n( '%d shared asset was reused across batches.', '%d shared assets were reused across batches.', (int) $imp['assets_reused'], 'ekwa-wsei' ),
+							_n( '%d asset was already in the Media Library from an earlier import and was reused (not duplicated).', '%d assets were already in the Media Library from earlier imports and were reused (not duplicated).', (int) $imp['assets_reused'], 'ekwa-wsei' ),
 							(int) $imp['assets_reused']
 						)
 					);
@@ -158,7 +158,7 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 		</div>
 	<?php else : ?>
 		<div class="ekwa-wsei-panel">
-			<p><?php esc_html_e( 'Upload one or more bundle ZIPs exported from another site (select all your batches at once). Assets are added to this site\'s Media Library, shared assets are reused across batches, and every link inside the stories is rewritten to point at the new copies.', 'ekwa-wsei' ); ?></p>
+			<p><?php esc_html_e( 'Upload bundle ZIPs exported from another site. You can select all your batches at once, OR import them one at a time (repeat this step for each ZIP) — either way works. Assets are added to this site\'s Media Library, anything already imported from the same source is reused (never duplicated), and every link inside the stories is rewritten to point at the new copies.', 'ekwa-wsei' ); ?></p>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data">
 				<input type="hidden" name="action" value="ekwa_wsei_import" />

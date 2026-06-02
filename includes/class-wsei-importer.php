@@ -215,6 +215,9 @@ class Importer {
 
 		@set_time_limit( 0 );
 		wp_raise_memory_limit( 'admin' );
+		// Best-effort extra headroom for image/thumbnail processing. Harmless if
+		// the host forbids ini_set or the real limit is system RAM.
+		@ini_set( 'memory_limit', '512M' );
 
 		$extract_dir = $work_dir . '/extracted';
 		wp_mkdir_p( $extract_dir );
@@ -268,6 +271,11 @@ class Importer {
 		$this->stat_total += count( $assets );
 		foreach ( $assets as $asset ) {
 			$this->import_asset( $asset, $extract_dir, $source_site );
+			// Free memory between assets — important on memory-constrained hosts,
+			// since thumbnail generation can hold a lot of image data.
+			if ( function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
 		}
 
 		// 2. Import each story with re-linked content and meta.
@@ -290,10 +298,18 @@ class Importer {
 	}
 
 	/**
+	 * Post meta key stamped on every imported attachment so the same source
+	 * asset can be recognised and reused on a later, separate import.
+	 */
+	const SOURCE_META_KEY = '_ekwa_wsei_src';
+
+	/**
 	 * Sideload a single asset into the media library and record remap entries.
 	 *
-	 * If the same source asset was already imported earlier in this run (across
-	 * batches), the existing copy is reused instead of duplicated.
+	 * The same source asset is reused instead of duplicated when it has already
+	 * been imported — both within this run (across batches) AND in an earlier,
+	 * separate import (looked up by post meta), so importing batches one at a
+	 * time stays just as clean as importing them all together.
 	 *
 	 * @param array  $asset       Asset manifest entry.
 	 * @param string $extract_dir Root of the extracted bundle.
@@ -305,17 +321,24 @@ class Importer {
 		$zip_path = isset( $asset['zip_path'] ) ? $asset['zip_path'] : '';
 		$src      = $extract_dir . '/' . ltrim( $zip_path, '/' );
 
-		// Reuse a copy already imported in an earlier batch of this run.
 		$dedup_key = $source_site . '|' . $old_id;
+
+		// 1. Reuse a copy already imported in this run (fast, in-memory).
 		if ( $old_id && isset( $this->seen_assets[ $dedup_key ] ) ) {
-			$new_id   = (int) $this->seen_assets[ $dedup_key ];
-			$new_url  = wp_get_attachment_url( $new_id );
-			$new_meta = wp_get_attachment_metadata( $new_id );
-			if ( $new_url ) {
-				$this->id_map[ $old_id ] = $new_id;
-				$this->build_url_map( $asset, $new_id, $new_url, is_array( $new_meta ) ? $new_meta : array() );
-				++$this->stat_reused;
-				return $new_id;
+			$reused = $this->reuse_asset( $asset, (int) $this->seen_assets[ $dedup_key ], $old_id, $dedup_key );
+			if ( $reused ) {
+				return $reused;
+			}
+		}
+
+		// 2. Reuse a copy imported during an earlier, separate import (persistent).
+		if ( $old_id && '' !== $source_site ) {
+			$existing = $this->find_existing_asset( $dedup_key );
+			if ( $existing ) {
+				$reused = $this->reuse_asset( $asset, $existing, $old_id, $dedup_key );
+				if ( $reused ) {
+					return $reused;
+				}
 			}
 		}
 
@@ -330,24 +353,46 @@ class Importer {
 
 		$filename = isset( $asset['filename'] ) && $asset['filename'] ? $asset['filename'] : wp_basename( $src );
 
-		// Place the file into the uploads folder (dedupes the name if needed).
-		$bits = wp_upload_bits( $filename, null, (string) file_get_contents( $src ) );
-		if ( ! empty( $bits['error'] ) ) {
+		// Place the file into the uploads folder using a streaming filesystem
+		// copy. We deliberately avoid file_get_contents()/wp_upload_bits(), which
+		// would load the whole asset (potentially a large video) into memory and
+		// can exhaust a low memory_limit / a memory-pressured server.
+		$upload_dir = wp_upload_dir();
+		if ( ! empty( $upload_dir['error'] ) ) {
 			$this->warnings[] = sprintf(
 				/* translators: 1: filename, 2: error */
 				__( 'Could not write asset "%1$s": %2$s', 'ekwa-wsei' ),
 				$filename,
-				$bits['error']
+				$upload_dir['error']
 			);
 			return 0;
 		}
 
-		$new_file = $bits['file'];
-		$new_url  = $bits['url'];
+		wp_mkdir_p( $upload_dir['path'] );
+		$unique    = wp_unique_filename( $upload_dir['path'], $filename );
+		$new_file  = trailingslashit( $upload_dir['path'] ) . $unique;
+		$new_url   = trailingslashit( $upload_dir['url'] ) . $unique;
+
+		if ( ! @copy( $src, $new_file ) ) {
+			$this->warnings[] = sprintf(
+				/* translators: %s: filename */
+				__( 'Could not copy asset "%s" into the uploads folder (check disk space and permissions).', 'ekwa-wsei' ),
+				$filename
+			);
+			return 0;
+		}
+
+		// Match the permissions WordPress normally applies to uploaded files.
+		$stat  = @stat( dirname( $new_file ) );
+		$perms = $stat ? ( $stat['mode'] & 0000666 ) : 0644;
+		@chmod( $new_file, $perms );
+
+		$filetype = wp_check_filetype( $new_file );
+		$mime     = ! empty( $asset['mime_type'] ) ? $asset['mime_type'] : ( $filetype['type'] ? $filetype['type'] : 'application/octet-stream' );
 
 		$attachment = array(
-			'post_mime_type' => isset( $asset['mime_type'] ) ? $asset['mime_type'] : $bits['type'],
-			'post_title'     => isset( $asset['title'] ) ? $asset['title'] : preg_replace( '/\.[^.]+$/', '', $filename ),
+			'post_mime_type' => $mime,
+			'post_title'     => isset( $asset['title'] ) && '' !== $asset['title'] ? $asset['title'] : preg_replace( '/\.[^.]+$/', '', $filename ),
 			'post_content'   => isset( $asset['description'] ) ? $asset['description'] : '',
 			'post_excerpt'   => isset( $asset['caption'] ) ? $asset['caption'] : '',
 			'post_status'    => 'inherit',
@@ -386,12 +431,68 @@ class Importer {
 			$new_meta = array();
 		}
 
+		// Stamp the source so this asset can be reused on a later separate import.
+		if ( '' !== $source_site ) {
+			update_post_meta( $new_id, self::SOURCE_META_KEY, $dedup_key );
+		}
+
 		$this->id_map[ $old_id ]          = (int) $new_id;
 		$this->seen_assets[ $dedup_key ]  = (int) $new_id;
 		++$this->stat_fresh;
 		$this->build_url_map( $asset, $new_id, $new_url, $new_meta );
 
 		return (int) $new_id;
+	}
+
+	/**
+	 * Reuse an already-imported attachment: re-establish the id/URL remap
+	 * tables for it and count it as reused. Returns 0 if the attachment has
+	 * since been deleted (so the caller falls through to a fresh import).
+	 *
+	 * @param array  $asset     Asset manifest entry.
+	 * @param int    $new_id    Existing attachment id to reuse.
+	 * @param int    $old_id    Original attachment id from the source site.
+	 * @param string $dedup_key Cache key.
+	 * @return int Attachment id, or 0 if it no longer exists.
+	 */
+	private function reuse_asset( array $asset, $new_id, $old_id, $dedup_key ) {
+		$new_id  = (int) $new_id;
+		$new_url = $new_id ? wp_get_attachment_url( $new_id ) : '';
+		if ( ! $new_url || 'attachment' !== get_post_type( $new_id ) ) {
+			// Stale reference (deleted media) — forget it and re-import fresh.
+			unset( $this->seen_assets[ $dedup_key ] );
+			return 0;
+		}
+
+		$new_meta = wp_get_attachment_metadata( $new_id );
+		$this->id_map[ $old_id ]         = $new_id;
+		$this->seen_assets[ $dedup_key ] = $new_id;
+		$this->build_url_map( $asset, $new_id, $new_url, is_array( $new_meta ) ? $new_meta : array() );
+		++$this->stat_reused;
+
+		return $new_id;
+	}
+
+	/**
+	 * Find an attachment previously imported from the same source asset.
+	 *
+	 * @param string $dedup_key "sourceSite|oldAttachmentId".
+	 * @return int Attachment id, or 0 if none.
+	 */
+	private function find_existing_asset( $dedup_key ) {
+		$ids = get_posts(
+			array(
+				'post_type'        => 'attachment',
+				'post_status'      => 'inherit',
+				'posts_per_page'   => 1,
+				'fields'           => 'ids',
+				'no_found_rows'    => true,
+				'suppress_filters' => true,
+				'meta_key'         => self::SOURCE_META_KEY,
+				'meta_value'       => $dedup_key,
+			)
+		);
+		return ! empty( $ids ) ? (int) $ids[0] : 0;
 	}
 
 	/**

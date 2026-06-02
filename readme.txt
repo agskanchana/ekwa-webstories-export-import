@@ -4,7 +4,7 @@ Tags: web stories, web-stories, export, import, migration, amp
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.2.1
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -67,11 +67,13 @@ stories are editable.
 **On the NEW site (import):**
 
 1. Go to *Stories Export/Import → Import*.
-2. Select ALL your batch ZIPs at once in the file field (or, for very large
-   bundles, drop a ZIP on the server via FTP/SFTP and paste its absolute path
-   into the *Server path* field).
-3. Click *Import bundle*. Assets shared between batches (e.g. the publisher logo)
-   are imported only once. A summary with edit/view links is shown when finished.
+2. Either select ALL your batch ZIPs at once, OR import them one at a time
+   (repeat this step for each ZIP). For very large bundles, drop a ZIP on the
+   server via FTP/SFTP and paste its absolute path into the *Server path* field.
+3. Click *Import bundle*. Assets already imported from the same source site
+   (e.g. the publisher logo shared by every batch) are reused, never duplicated
+   — this holds whether you import all at once or one ZIP at a time. A summary
+   with edit/view links is shown when finished.
 
 == Why batches? ==
 
@@ -113,6 +115,19 @@ if the repo is made private), define a token in wp-config.php:
 `define( 'EKWA_WSEI_GITHUB_TOKEN', 'ghp_yourtoken' );`
 
 == Changelog ==
+
+= 1.2.3 =
+* Much lower memory use during import: assets are now copied into the uploads
+  folder with a streaming filesystem copy instead of being read fully into
+  memory, and memory is freed between assets. This avoids the "critical error"
+  (PHP out-of-memory) seen when importing video/image-heavy bundles on
+  memory-constrained servers. Also raises the memory limit best-effort.
+
+= 1.2.2 =
+* Import batches one at a time if you prefer (repeat the import for each ZIP).
+  Shared-asset de-duplication now persists across separate imports — each
+  imported attachment is stamped with its source, so re-importing a batch reuses
+  the existing media instead of creating duplicates.
 
 = 1.2.1 =
 * Fixed corrupted batch ZIPs when exporting many batches. Builds are now
