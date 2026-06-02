@@ -202,6 +202,32 @@ class Importer {
 	}
 
 	/**
+	 * Write a caught error/exception to the PHP error log (always, so it shows
+	 * even when WP_DEBUG display is off) with enough context to diagnose it.
+	 *
+	 * @param string $kind  'asset' or 'story'.
+	 * @param array  $item  The manifest item being processed.
+	 * @param \Throwable $e  The caught throwable.
+	 * @return void
+	 */
+	private function log_throwable( $kind, array $item, \Throwable $e ) {
+		$label = 'asset' === $kind
+			? ( isset( $item['filename'] ) ? $item['filename'] : ( isset( $item['old_id'] ) ? '#' . $item['old_id'] : '?' ) )
+			: ( isset( $item['title'] ) ? $item['title'] : '?' );
+
+		error_log(
+			sprintf(
+				'[ekwa-wsei] %s import error for "%s": %s in %s:%d',
+				$kind,
+				$label,
+				$e->getMessage(),
+				$e->getFile(),
+				$e->getLine()
+			)
+		);
+	}
+
+	/**
 	 * Core import routine for ONE ZIP. Accumulates into instance state.
 	 *
 	 * @param string $zip_path Absolute path to the bundle ZIP.
@@ -267,10 +293,22 @@ class Importer {
 		}
 
 		// 1. Import every asset first and build the remap tables (dedup-aware).
+		// Each asset is isolated so a single bad file (e.g. an image that breaks
+		// thumbnail generation) becomes a warning instead of killing the import.
 		$assets = isset( $manifest['assets'] ) && is_array( $manifest['assets'] ) ? $manifest['assets'] : array();
 		$this->stat_total += count( $assets );
 		foreach ( $assets as $asset ) {
-			$this->import_asset( $asset, $extract_dir, $source_site );
+			try {
+				$this->import_asset( $asset, $extract_dir, $source_site );
+			} catch ( \Throwable $e ) {
+				$this->log_throwable( 'asset', $asset, $e );
+				$this->warnings[] = sprintf(
+					/* translators: 1: filename, 2: error message */
+					__( 'Asset "%1$s" was skipped due to an error: %2$s', 'ekwa-wsei' ),
+					isset( $asset['filename'] ) ? $asset['filename'] : ( isset( $asset['old_id'] ) ? (string) $asset['old_id'] : '?' ),
+					$e->getMessage()
+				);
+			}
 			// Free memory between assets — important on memory-constrained hosts,
 			// since thumbnail generation can hold a lot of image data.
 			if ( function_exists( 'gc_collect_cycles' ) ) {
@@ -281,7 +319,12 @@ class Importer {
 		// 2. Import each story with re-linked content and meta.
 		$stories = isset( $manifest['stories'] ) && is_array( $manifest['stories'] ) ? $manifest['stories'] : array();
 		foreach ( $stories as $story ) {
-			$new = $this->import_story( $story );
+			try {
+				$new = $this->import_story( $story );
+			} catch ( \Throwable $e ) {
+				$this->log_throwable( 'story', $story, $e );
+				$new = new \WP_Error( 'story_exception', $e->getMessage() );
+			}
 			if ( is_wp_error( $new ) ) {
 				$this->warnings[] = sprintf(
 					/* translators: 1: story title, 2: error message */

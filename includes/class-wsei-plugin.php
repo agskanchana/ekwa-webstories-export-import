@@ -264,15 +264,29 @@ class Plugin {
 		$importer = new Importer();
 		$server_path = isset( $_POST['server_path'] ) ? sanitize_text_field( wp_unslash( $_POST['server_path'] ) ) : '';
 
-		if ( $server_path ) {
-			$result = $importer->import_server_file( $server_path );
-		} else {
-			$files = $this->collect_uploaded_bundles();
-			if ( empty( $files ) ) {
-				$result = new \WP_Error( 'no_input', __( 'Please choose one or more bundle ZIPs to import, or provide a server path.', 'ekwa-wsei' ) );
+		// Top-level safety net: turn any catchable error/exception during import
+		// into a clean message instead of a white "critical error" screen.
+		try {
+			if ( $server_path ) {
+				$result = $importer->import_server_file( $server_path );
 			} else {
-				$result = $importer->import_uploaded_files( $files );
+				$files = $this->collect_uploaded_bundles();
+				if ( empty( $files ) ) {
+					$result = new \WP_Error( 'no_input', __( 'Please choose one or more bundle ZIPs to import, or provide a server path.', 'ekwa-wsei' ) );
+				} else {
+					$result = $importer->import_uploaded_files( $files );
+				}
 			}
+		} catch ( \Throwable $e ) {
+			error_log( '[ekwa-wsei] import aborted: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			$result = new \WP_Error(
+				'import_exception',
+				sprintf(
+					/* translators: %s: error message */
+					__( 'The import stopped on an error: %s', 'ekwa-wsei' ),
+					$e->getMessage()
+				)
+			);
 		}
 
 		if ( is_wp_error( $result ) ) {

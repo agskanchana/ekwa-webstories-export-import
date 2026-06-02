@@ -4,7 +4,7 @@ Tags: web stories, web-stories, export, import, migration, amp
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -115,6 +115,12 @@ if the repo is made private), define a token in wp-config.php:
 `define( 'EKWA_WSEI_GITHUB_TOKEN', 'ghp_yourtoken' );`
 
 == Changelog ==
+
+= 1.2.4 =
+* Import is now crash-resistant: a failing asset or story is isolated (logged as
+  a warning) instead of taking down the whole import with a "critical error",
+  and any catchable error is written to the PHP error log prefixed with
+  [ekwa-wsei] for easy diagnosis. A top-level handler reports errors cleanly.
 
 = 1.2.3 =
 * Much lower memory use during import: assets are now copied into the uploads
