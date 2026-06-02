@@ -1,0 +1,92 @@
+.ekwa-wsei .ekwa-wsei-panel {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin-top: 16px;
+	max-width: 1100px;
+}
+
+.ekwa-wsei .ekwa-wsei-table {
+	margin-top: 8px;
+}
+
+.ekwa-wsei .ekwa-wsei-table .check-column {
+	width: 2.2em;
+	vertical-align: middle;
+	text-align: center;
+}
+
+.ekwa-wsei .ekwa-wsei-id {
+	color: #787c82;
+	font-weight: 400;
+	font-size: 12px;
+}
+
+.ekwa-wsei-imported-list {
+	margin: 6px 0 6px 18px;
+	list-style: disc;
+}
+
+.ekwa-wsei-warnings {
+	margin-top: 6px;
+}
+
+.ekwa-wsei-warnings summary {
+	cursor: pointer;
+	color: #b32d2e;
+}
+
+.ekwa-wsei-warnings ul {
+	margin: 6px 0 6px 18px;
+	list-style: disc;
+	color: #555;
+}
+
+.ekwa-wsei .submit .button {
+	margin-right: 8px;
+}
+
+.ekwa-wsei .ekwa-wsei-spinner {
+	float: none;
+	margin: 0;
+	vertical-align: middle;
+}
+
+.ekwa-wsei .ekwa-wsei-batch-control {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 10px 12px;
+}
+
+.ekwa-wsei .ekwa-wsei-batch-control input[type="number"] {
+	margin: 0 6px;
+}
+
+.ekwa-wsei-progress {
+	margin-top: 16px;
+	padding: 12px 16px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ekwa-wsei-progress-status {
+	font-weight: 600;
+	margin-top: 0;
+}
+
+.ekwa-wsei-downloads {
+	margin: 8px 0 8px 4px;
+	list-style: none;
+}
+
+.ekwa-wsei-downloads li {
+	padding: 4px 0;
+	border-bottom: 1px solid #ececec;
+}
+
+.ekwa-wsei-downloads li.ekwa-wsei-error {
+	color: #b32d2e;
+}
