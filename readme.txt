@@ -4,7 +4,7 @@ Tags: web stories, web-stories, export, import, migration, amp
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.2.4
+Stable tag: 1.2.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -115,6 +115,18 @@ if the repo is made private), define a token in wp-config.php:
 `define( 'EKWA_WSEI_GITHUB_TOKEN', 'ghp_yourtoken' );`
 
 == Changelog ==
+
+= 1.2.5 =
+* New: "Export this story" button on every row exports a single post as a ZIP
+  via a plain download link (no JavaScript) — the smallest, most reliable
+  request, ideal when larger exports return a 500.
+* Export no longer compresses media (images/videos are already compressed):
+  files are stored uncompressed, which is far faster and avoids the timeouts /
+  500 errors that ZIP deflate caused on large media.
+* Offloaded/remote media is now streamed to a temp file instead of being read
+  into memory, and a single unreadable asset no longer aborts the whole export.
+* Batch builds are wrapped so an error returns a clear message (and is logged
+  as [ekwa-wsei]) instead of a 500.
 
 = 1.2.4 =
 * Import is now crash-resistant: a failing asset or story is isolated (logged as

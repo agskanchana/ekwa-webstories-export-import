@@ -47,6 +47,7 @@ class Plugin {
 	private function __construct() {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_post_ekwa_wsei_export', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_ekwa_wsei_export_one', array( $this, 'handle_export_one' ) );
 		add_action( 'admin_post_ekwa_wsei_import', array( $this, 'handle_import' ) );
 		add_action( 'admin_post_ekwa_wsei_download', array( $this, 'handle_download' ) );
 		add_action( 'wp_ajax_ekwa_wsei_export_batch', array( $this, 'ajax_export_batch' ) );
@@ -180,6 +181,43 @@ class Plugin {
 	}
 
 	/**
+	 * Export a SINGLE story as a direct ZIP download (one post at a time).
+	 *
+	 * A plain GET download link, so it needs no JavaScript and is the smallest,
+	 * most reliable possible request.
+	 */
+	public function handle_export_one() {
+		if ( ! current_user_can( Helpers::capability() ) ) {
+			wp_die( esc_html__( 'Permission denied.', 'ekwa-wsei' ) );
+		}
+		$story_id = isset( $_GET['story'] ) ? (int) $_GET['story'] : 0;
+		check_admin_referer( 'ekwa_wsei_export_one_' . $story_id );
+
+		if ( ! $story_id ) {
+			$this->redirect_with_result( 'export', array( 'type' => 'error', 'message' => __( 'No story specified.', 'ekwa-wsei' ) ) );
+		}
+
+		try {
+			$exporter = new Exporter();
+			$result   = $exporter->export_and_stream( array( $story_id ) );
+		} catch ( \Throwable $e ) {
+			error_log( '[ekwa-wsei] single export failed for #' . $story_id . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			$result = new \WP_Error( 'export_exception', $e->getMessage() );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			$this->redirect_with_result(
+				'export',
+				array(
+					'type'    => 'error',
+					'message' => $result->get_error_message(),
+				)
+			);
+		}
+		exit;
+	}
+
+	/**
 	 * AJAX: build ONE batch ZIP for the given story ids and return a download link.
 	 *
 	 * Keeps each request small so large libraries never time out / 500.
@@ -201,8 +239,13 @@ class Plugin {
 		// Opportunistically clean up old downloads.
 		Exporter::cleanup_temp();
 
-		$exporter = new Exporter();
-		$result   = $exporter->build_zip( $story_ids );
+		try {
+			$exporter = new Exporter();
+			$result   = $exporter->build_zip( $story_ids );
+		} catch ( \Throwable $e ) {
+			error_log( '[ekwa-wsei] batch export failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			wp_send_json_error( array( 'message' => $e->getMessage() ), 500 );
+		}
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 500 );
 		}

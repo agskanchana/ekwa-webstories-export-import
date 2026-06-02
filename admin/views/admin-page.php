@@ -123,10 +123,17 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 								<th><?php esc_html_e( 'Title', 'ekwa-wsei' ); ?></th>
 								<th><?php esc_html_e( 'Status', 'ekwa-wsei' ); ?></th>
 								<th><?php esc_html_e( 'Last modified', 'ekwa-wsei' ); ?></th>
+								<th><?php esc_html_e( 'Export', 'ekwa-wsei' ); ?></th>
 							</tr>
 						</thead>
 						<tbody>
 							<?php foreach ( $stories as $story ) : ?>
+								<?php
+								$one_url = wp_nonce_url(
+									admin_url( 'admin-post.php?action=ekwa_wsei_export_one&story=' . (int) $story['id'] ),
+									'ekwa_wsei_export_one_' . (int) $story['id']
+								);
+								?>
 								<tr>
 									<th class="check-column">
 										<input type="checkbox" class="ekwa-wsei-story" name="story_ids[]" value="<?php echo esc_attr( $story['id'] ); ?>" />
@@ -134,10 +141,13 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 									<td><strong><?php echo esc_html( $story['title'] ); ?></strong> <span class="ekwa-wsei-id">#<?php echo (int) $story['id']; ?></span></td>
 									<td><?php echo esc_html( $story['status'] ); ?></td>
 									<td><?php echo esc_html( mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $story['modified'] ) ); ?></td>
+									<td><a class="button button-small" href="<?php echo esc_url( $one_url ); ?>"><?php esc_html_e( 'Export this story', 'ekwa-wsei' ); ?></a></td>
 								</tr>
 							<?php endforeach; ?>
 						</tbody>
 					</table>
+
+					<p class="description"><?php esc_html_e( 'To export one post at a time, click "Export this story" on any row above — it downloads just that single story as a ZIP (the smallest, most reliable request, and the best option if larger exports give a 500 error). Or tick several stories and use the batch buttons below.', 'ekwa-wsei' ); ?></p>
 
 					<p class="submit">
 						<button type="submit" class="button button-primary" id="ekwa-wsei-export-btn"><?php esc_html_e( 'Export selected (in batches)', 'ekwa-wsei' ); ?></button>

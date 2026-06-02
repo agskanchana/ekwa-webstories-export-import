@@ -3,7 +3,7 @@
  * Plugin Name:       Ekwa Web Stories Export &amp; Import
  * Plugin URI:        https://www.ekwa.com/
  * Description:        Export Google Web Stories (with every image, video, poster and publisher logo asset) from one WordPress site and import them — fully re-linked — into another. Built for site redesigns / migrations.
- * Version:           1.2.4
+ * Version:           1.2.5
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            Ekwa
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'EKWA_WSEI_VERSION', '1.2.4' );
+define( 'EKWA_WSEI_VERSION', '1.2.5' );
 define( 'EKWA_WSEI_FILE', __FILE__ );
 define( 'EKWA_WSEI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EKWA_WSEI_URL', plugin_dir_url( __FILE__ ) );

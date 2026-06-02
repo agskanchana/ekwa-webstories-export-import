@@ -44,6 +44,13 @@ class Exporter {
 	);
 
 	/**
+	 * Temp files downloaded for offloaded media, deleted after the ZIP closes.
+	 *
+	 * @var string[]
+	 */
+	private $temp_files = array();
+
+	/**
 	 * Get all Web Stories for the export listing UI.
 	 *
 	 * @return array[] Each: id, title, status, date, modified.
@@ -216,11 +223,16 @@ class Exporter {
 			return new \WP_Error( 'zip_open_failed', __( 'Could not create the export ZIP file.', 'ekwa-wsei' ) );
 		}
 
-		// Add each asset file and record its manifest entry.
+		// Add each asset file and record its manifest entry. A single bad asset
+		// must not abort the whole export.
 		foreach ( array_keys( $asset_ids ) as $aid ) {
-			$entry = $this->build_asset_entry( (int) $aid, $zip );
-			if ( $entry ) {
-				$manifest['assets'][] = $entry;
+			try {
+				$entry = $this->build_asset_entry( (int) $aid, $zip );
+				if ( $entry ) {
+					$manifest['assets'][] = $entry;
+				}
+			} catch ( \Throwable $e ) {
+				error_log( '[ekwa-wsei] export skipped asset #' . (int) $aid . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 		}
 
@@ -235,7 +247,13 @@ class Exporter {
 		// IMPORTANT: ZipArchive writes deferred file data here. A failure (e.g.
 		// disk full, locked source file) means a truncated/corrupt ZIP, so we
 		// must check the result instead of reporting a false success.
-		if ( ! $zip->close() ) {
+		$close_ok = $zip->close();
+
+		// The deferred file data has now been written, so any temp downloads
+		// can go.
+		$this->cleanup_temp_files();
+
+		if ( ! $close_ok ) {
 			@unlink( $zip_path );
 			return new \WP_Error(
 				'zip_close_failed',
@@ -434,13 +452,22 @@ class Exporter {
 			$added = $zip->addFile( $file_path, $zip_path );
 		}
 		if ( ! $added ) {
-			// Fall back to downloading the file via its URL (e.g. offloaded media).
-			$bytes = $this->fetch_remote( $url );
-			if ( null === $bytes ) {
+			// Fall back to downloading the file via its URL (e.g. offloaded
+			// media). Stream it to a temp file rather than loading it into
+			// memory, then add that file.
+			$tmp = $this->fetch_remote_to_file( $url );
+			if ( null === $tmp ) {
 				return null;
 			}
-			$zip->addFromString( $zip_path, $bytes );
+			$this->temp_files[] = $tmp;
+			$added = $zip->addFile( $tmp, $zip_path );
+			if ( ! $added ) {
+				return null;
+			}
 		}
+		// Skip compression for media (already-compressed jpg/png/mp4/etc.).
+		// Deflating them is slow, can time out, and saves almost nothing.
+		$this->store_no_compress( $zip, $zip_path );
 
 		$metadata = wp_get_attachment_metadata( $id );
 		$metadata = is_array( $metadata ) ? $metadata : array();
@@ -453,7 +480,9 @@ class Exporter {
 			if ( file_exists( $orig_path ) && wp_basename( $orig_path ) !== $filename ) {
 				$original_filename = wp_basename( $orig_path );
 				$original_zip_path = $zip_dir . 'original/' . $original_filename;
-				$zip->addFile( $orig_path, $original_zip_path );
+				if ( $zip->addFile( $orig_path, $original_zip_path ) ) {
+					$this->store_no_compress( $zip, $original_zip_path );
+				}
 			}
 		}
 
@@ -485,24 +514,57 @@ class Exporter {
 	}
 
 	/**
-	 * Download a remote file's bytes.
+	 * Download a remote file straight to a temp file (no in-memory buffering).
 	 *
 	 * @param string $url URL.
-	 * @return string|null Raw bytes or null on failure.
+	 * @return string|null Absolute temp path, or null on failure.
 	 */
-	private function fetch_remote( $url ) {
+	private function fetch_remote_to_file( $url ) {
+		$tmp = wp_tempnam( 'ekwa-wsei-asset' );
+		if ( ! $tmp ) {
+			return null;
+		}
 		$response = wp_remote_get(
 			$url,
 			array(
-				'timeout'  => 60,
-				'stream'   => false,
+				'timeout'   => 120,
+				'stream'    => true,
+				'filename'  => $tmp,
 				'sslverify' => false,
 			)
 		);
-		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) || ! file_exists( $tmp ) || 0 === filesize( $tmp ) ) {
+			@unlink( $tmp );
 			return null;
 		}
-		$body = wp_remote_retrieve_body( $response );
-		return ( '' === $body ) ? null : $body;
+		return $tmp;
+	}
+
+	/**
+	 * Delete any temp files downloaded for offloaded media.
+	 *
+	 * @return void
+	 */
+	private function cleanup_temp_files() {
+		foreach ( $this->temp_files as $tmp ) {
+			if ( $tmp && file_exists( $tmp ) ) {
+				@unlink( $tmp );
+			}
+		}
+		$this->temp_files = array();
+	}
+
+	/**
+	 * Mark a ZIP entry as "stored" (uncompressed). No-op on libzip builds that
+	 * do not expose per-entry compression control.
+	 *
+	 * @param \ZipArchive $zip   Open archive.
+	 * @param string      $entry Entry name inside the archive.
+	 * @return void
+	 */
+	private function store_no_compress( \ZipArchive $zip, $entry ) {
+		if ( method_exists( $zip, 'setCompressionName' ) && defined( 'ZipArchive::CM_STORE' ) ) {
+			@$zip->setCompressionName( $entry, \ZipArchive::CM_STORE );
+		}
 	}
 }
