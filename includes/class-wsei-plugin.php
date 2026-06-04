@@ -101,13 +101,12 @@ class Plugin {
 				'downloadUrl'  => admin_url( 'admin-post.php' ),
 				'nonce'        => wp_create_nonce( self::NONCE_BATCH ),
 				'i18n'         => array(
-					'building'   => __( 'Building batch %1$d of %2$d…', 'ekwa-wsei' ),
-					'done'       => __( 'Done — %d batch(es) built and downloaded. If any download looks incomplete, click its link below to fetch it again (files stay for ~2 hours).', 'ekwa-wsei' ),
-					'failed'     => __( 'Batch %1$d failed: %2$s', 'ekwa-wsei' ),
-					'batchLabel' => __( 'Batch %1$d — %2$d stories, %3$d assets', 'ekwa-wsei' ),
+					'building'   => __( 'Building your export ZIP — this can take a while for large libraries…', 'ekwa-wsei' ),
+					'done'       => __( 'Done — your export ZIP was built and downloaded. If the download looks incomplete or your browser blocked it, click the link below to fetch it again (it stays on the server for ~2 hours). Then import it on the new site.', 'ekwa-wsei' ),
+					'failed'     => __( 'Export failed: %s', 'ekwa-wsei' ),
+					'label'      => __( 'Export ZIP — %1$d stories, %2$d assets', 'ekwa-wsei' ),
 					'download'   => __( 'Download', 'ekwa-wsei' ),
 					'noneChosen' => __( 'Please select at least one story to export.', 'ekwa-wsei' ),
-					'downloadAll' => __( 'Download all', 'ekwa-wsei' ),
 				),
 			)
 		);

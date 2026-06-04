@@ -4,7 +4,7 @@ Tags: web stories, web-stories, export, import, migration, amp
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.2
-Stable tag: 1.2.6
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -58,36 +58,41 @@ stories are editable.
 
 1. Go to *Stories Export/Import → Export*.
 2. Tick the stories you want (or use *Export ALL stories*).
-3. Set *Stories per ZIP (batch size)* — e.g. 2 or 3 (use 1 if you have very
-   large videos). The library is exported as several small ZIPs instead of one
-   huge one, which avoids timeouts / 500 errors on big libraries.
-4. Click *Export selected (in batches)*. Each batch builds, then a download link
-   appears for it. Click *Download all batches* (or each link) and save them.
+3. Click *Export selected stories* (or *Export ALL stories*). All the selected
+   stories are bundled into a **single ZIP**, built on the server and then
+   downloaded automatically. The ZIP is also kept on the server for ~2 hours, so
+   if a download looks incomplete you can click its link to fetch it again.
 
 **On the NEW site (import):**
 
 1. Go to *Stories Export/Import → Import*.
-2. Either select ALL your batch ZIPs at once, OR import them one at a time
-   (repeat this step for each ZIP). For very large bundles, drop a ZIP on the
-   server via FTP/SFTP and paste its absolute path into the *Server path* field.
+2. Upload the ZIP. For a very large bundle that exceeds the upload limit, drop it
+   on the server via FTP/SFTP and paste its absolute path into the *Server path*
+   field instead.
 3. Click *Import bundle*. Assets already imported from the same source site
-   (e.g. the publisher logo shared by every batch) are reused, never duplicated
-   — this holds whether you import all at once or one ZIP at a time. A summary
-   with edit/view links is shown when finished.
+   (e.g. a shared publisher logo) are reused, never duplicated. A summary with
+   edit/view links is shown when finished.
 
-== Why batches? ==
+== Single ZIP and memory ==
 
-Exporting a large library as a single ZIP can exceed PHP's execution time or
-memory limit (often seen as a 500 error), and the resulting file can be too big
-to upload on the destination. Building several small ZIPs sidesteps both: each
-ZIP is created in its own quick request, and stays small enough to import. You
-choose how many stories go in each ZIP.
+Export builds **one** self-contained ZIP. It stays memory-safe no matter how many
+stories or how large the videos are, because media files are streamed into the
+archive on disk (ZipArchive `addFile`) rather than loaded into PHP memory, and
+remote/offloaded media is streamed to a temp file first. The download itself is
+also streamed in chunks.
+
+The one limit that scales with library size is **time**: building (and streaming)
+a multi-gigabyte ZIP in a single request can exceed your web server's timeout,
+seen as a 500 error. If that happens, export fewer stories at a time, or use the
+per-row *Export this story* button. A very large ZIP may also exceed the upload
+limit on the destination — in that case import it via the *Server path* field.
 
 == Notes & limitations ==
 
-* Selecting many ZIPs to import at once is limited by your server's
-  `max_file_uploads` (commonly 20) and total `post_max_size`. Import in groups,
-  or use the *Server path* option, if you have a very large number of batches.
+* Import still accepts more than one ZIP at a time (e.g. bundles exported from
+  several sites). Selecting many at once is limited by your server's
+  `max_file_uploads` and total `post_max_size`; for large files use the
+  *Server path* option instead.
 * Within a single import run, shared assets are de-duplicated. Importing the same
   bundle again later creates fresh copies (best used onto a clean redesign site).
 * Story dates, slugs, statuses, captions and alt text are preserved.
@@ -115,6 +120,17 @@ if the repo is made private), define a token in wp-config.php:
 `define( 'EKWA_WSEI_GITHUB_TOKEN', 'ghp_yourtoken' );`
 
 == Changelog ==
+
+= 1.3.0 =
+* Export now produces a **single ZIP** containing all the selected stories,
+  instead of splitting the library into several batch ZIPs. The batch-size
+  control has been removed. This is memory-safe: media is streamed into the
+  archive on disk (it is never loaded into PHP memory), so one big ZIP uses no
+  more memory than a small one.
+* The ZIP is built server-side and downloaded automatically, and is still kept
+  on the server for ~2 hours so an interrupted download can be re-clicked. Very
+  large libraries can still hit the server's time limit — export fewer stories,
+  or use the per-row "Export this story" button, if you get a 500.
 
 = 1.2.6 =
 * Fixes the "critical error" (fatal out-of-memory) during import. Added a
