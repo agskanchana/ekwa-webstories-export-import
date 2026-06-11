@@ -110,10 +110,20 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 						<span class="description"><?php printf( esc_html__( '%d stories available.', 'ekwa-wsei' ), (int) count( $stories ) ); ?></span>
 					</p>
 
+					<p class="ekwa-wsei-export-mode">
+						<strong><?php esc_html_e( 'Download as:', 'ekwa-wsei' ); ?></strong>
+						<label><input type="radio" name="ekwa-wsei-export-mode" value="single" checked /> <?php esc_html_e( 'One single ZIP (all selected stories together)', 'ekwa-wsei' ); ?></label>
+						<label><input type="radio" name="ekwa-wsei-export-mode" value="batch" /> <?php esc_html_e( 'Multiple batch ZIPs', 'ekwa-wsei' ); ?></label>
+					</p>
+
+					<p class="ekwa-wsei-batch-control">
+						<label for="ekwa-wsei-batch-size"><strong><?php esc_html_e( 'Stories per ZIP (batch size):', 'ekwa-wsei' ); ?></strong></label>
+						<input type="number" id="ekwa-wsei-batch-size" min="1" step="1" value="2" class="small-text" />
+						<span class="description"><?php esc_html_e( 'Used only for "Multiple batch ZIPs". Smaller batches build more reliably and stay small enough to upload on import. Use 1 if you have very large videos.', 'ekwa-wsei' ); ?></span>
+					</p>
+
 					<p class="description ekwa-wsei-single-note">
-						<?php esc_html_e( 'All selected stories are exported into a single ZIP. The file is built on the server (media is streamed into it, so memory stays low no matter how many stories), then downloaded automatically.', 'ekwa-wsei' ); ?>
-						<br />
-						<?php esc_html_e( 'For a very large library this one request can still hit your server\'s time limit (a 500 error). If that happens, export fewer stories at a time, or use "Export this story" per row.', 'ekwa-wsei' ); ?>
+						<?php esc_html_e( 'Single ZIP is memory-safe no matter how many stories (media is streamed into the archive, never loaded into memory). For a very large library the one request can still hit your server\'s time limit (a 500 error) — if that happens, switch to "Multiple batch ZIPs", export fewer stories, or use "Export this story" per row.', 'ekwa-wsei' ); ?>
 					</p>
 
 					<table class="widefat striped ekwa-wsei-table">
@@ -147,7 +157,7 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 						</tbody>
 					</table>
 
-					<p class="description"><?php esc_html_e( 'To export one post at a time, click "Export this story" on any row above — it downloads just that single story as a ZIP (the smallest, most reliable request, and the best option if a larger export gives a 500 error). Or tick several stories and use the buttons below to build one combined ZIP.', 'ekwa-wsei' ); ?></p>
+					<p class="description"><?php esc_html_e( 'To export one post at a time, click "Export this story" on any row above — it downloads just that single story as a ZIP (the smallest, most reliable request, and the best option if a larger export gives a 500 error). Or tick several stories, choose how to download them above, then use the buttons below.', 'ekwa-wsei' ); ?></p>
 
 					<p class="submit">
 						<button type="submit" class="button button-primary" id="ekwa-wsei-export-btn"><?php esc_html_e( 'Export selected stories', 'ekwa-wsei' ); ?></button>
@@ -160,9 +170,9 @@ $import_url = admin_url( 'admin.php?page=' . Plugin::MENU_SLUG . '&tab=import' )
 					<p class="ekwa-wsei-progress-status"></p>
 					<ul id="ekwa-wsei-export-downloads" class="ekwa-wsei-downloads"></ul>
 					<p>
-						<button type="button" class="button" id="ekwa-wsei-download-all" hidden><?php esc_html_e( 'Download the ZIP again', 'ekwa-wsei' ); ?></button>
+						<button type="button" class="button" id="ekwa-wsei-download-all" hidden><?php esc_html_e( 'Download again', 'ekwa-wsei' ); ?></button>
 					</p>
-					<p class="description"><?php esc_html_e( 'Your selected stories are bundled into one ZIP, built on the server and then downloaded automatically. Keep this tab open until it finishes. If the download looks incomplete or your browser blocked it, just click its link above again — the ZIP stays on the server for ~2 hours. Then import it on the Import tab of the new site. Tip: a very large single ZIP may exceed the upload limit on the new site — if so, upload it via FTP/SFTP and use the Import tab\'s "Server path" field.', 'ekwa-wsei' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Your selected stories are bundled and downloaded automatically — either as one combined ZIP or as several batch ZIPs, per your choice above. Each file is built on the server and kept there for ~2 hours, so if a download looks incomplete or your browser blocked it, just click its link above again. Then import the ZIP(s) on the Import tab of the new site. Tip: a very large single ZIP may exceed the upload limit on the new site — if so, switch to batch ZIPs, or upload it via FTP/SFTP and use the Import tab\'s "Server path" field.', 'ekwa-wsei' ); ?></p>
 				</div>
 			<?php endif; ?>
 		</div>

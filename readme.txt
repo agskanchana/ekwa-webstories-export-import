@@ -58,34 +58,44 @@ stories are editable.
 
 1. Go to *Stories Export/Import → Export*.
 2. Tick the stories you want (or use *Export ALL stories*).
-3. Click *Export selected stories* (or *Export ALL stories*). All the selected
-   stories are bundled into a **single ZIP**, built on the server and then
-   downloaded automatically. The ZIP is also kept on the server for ~2 hours, so
+3. Choose how to download them under **Download as**:
+   * **One single ZIP** (default) — every selected story in one bundle.
+   * **Multiple batch ZIPs** — split into smaller ZIPs of N stories each (set the
+     batch size). Each batch builds and downloads one at a time.
+4. Click *Export selected stories* (or *Export ALL stories*). The ZIP(s) build on
+   the server and download automatically, and stay on the server for ~2 hours, so
    if a download looks incomplete you can click its link to fetch it again.
 
 **On the NEW site (import):**
 
 1. Go to *Stories Export/Import → Import*.
-2. Upload the ZIP. For a very large bundle that exceeds the upload limit, drop it
-   on the server via FTP/SFTP and paste its absolute path into the *Server path*
-   field instead.
+2. Upload the ZIP(s). For a very large bundle that exceeds the upload limit, drop
+   it on the server via FTP/SFTP and paste its absolute path into the *Server
+   path* field instead.
 3. Click *Import bundle*. Assets already imported from the same source site
    (e.g. a shared publisher logo) are reused, never duplicated. A summary with
    edit/view links is shown when finished.
 
-== Single ZIP and memory ==
+== Single ZIP vs. batches ==
 
-Export builds **one** self-contained ZIP. It stays memory-safe no matter how many
-stories or how large the videos are, because media files are streamed into the
-archive on disk (ZipArchive `addFile`) rather than loaded into PHP memory, and
-remote/offloaded media is streamed to a temp file first. The download itself is
-also streamed in chunks.
+Export offers two ways to download, chosen per export:
 
-The one limit that scales with library size is **time**: building (and streaming)
-a multi-gigabyte ZIP in a single request can exceed your web server's timeout,
-seen as a 500 error. If that happens, export fewer stories at a time, or use the
-per-row *Export this story* button. A very large ZIP may also exceed the upload
-limit on the destination — in that case import it via the *Server path* field.
+* **One single ZIP** — everything in one bundle. This is memory-safe no matter how
+  many stories or how large the videos are, because media files are streamed into
+  the archive on disk (ZipArchive `addFile`) rather than loaded into PHP memory,
+  and remote/offloaded media is streamed to a temp file first. The download is
+  also streamed in chunks. The one limit that scales with library size is **time**:
+  building (and streaming) a multi-gigabyte ZIP in a single request can exceed your
+  web server's timeout (a 500 error), and a very large ZIP may exceed the upload
+  limit on the destination (import it via the *Server path* field).
+* **Multiple batch ZIPs** — the library is split into several small ZIPs, each
+  built in its own quick request. This sidesteps server timeouts on big libraries
+  and keeps each file small enough to upload on import. You choose how many stories
+  go in each ZIP. Shared assets (e.g. the publisher logo) are de-duplicated on
+  import, so importing the batches is just as clean as importing a single ZIP.
+
+When in doubt, start with a single ZIP; switch to batches if a large export times
+out, or use the per-row *Export this story* button.
 
 == Notes & limitations ==
 
@@ -122,15 +132,18 @@ if the repo is made private), define a token in wp-config.php:
 == Changelog ==
 
 = 1.3.0 =
-* Export now produces a **single ZIP** containing all the selected stories,
-  instead of splitting the library into several batch ZIPs. The batch-size
-  control has been removed. This is memory-safe: media is streamed into the
-  archive on disk (it is never loaded into PHP memory), so one big ZIP uses no
-  more memory than a small one.
-* The ZIP is built server-side and downloaded automatically, and is still kept
-  on the server for ~2 hours so an interrupted download can be re-clicked. Very
-  large libraries can still hit the server's time limit — export fewer stories,
-  or use the per-row "Export this story" button, if you get a 500.
+* New "Download as" choice on the Export tab: export everything as **one single
+  ZIP**, or as **multiple batch ZIPs** (the previous behaviour). Both options are
+  available; single ZIP is the default.
+* Single-ZIP export is memory-safe no matter how many stories or how large the
+  videos are: media is streamed into the archive on disk (never loaded into PHP
+  memory), so one big ZIP uses no more memory than a small one.
+* The batch-size control now applies only to "Multiple batch ZIPs" and is hidden
+  in single-ZIP mode. ZIP(s) are built server-side, downloaded automatically, and
+  kept on the server for ~2 hours so an interrupted download can be re-clicked.
+* If a very large single ZIP times out (500) or is too big to upload on import,
+  switch to batch ZIPs, use the per-row "Export this story" button, or import via
+  the "Server path" field.
 
 = 1.2.6 =
 * Fixes the "critical error" (fatal out-of-memory) during import. Added a

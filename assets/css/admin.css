@@ -53,11 +53,23 @@
 	vertical-align: middle;
 }
 
-.ekwa-wsei .ekwa-wsei-single-note {
+.ekwa-wsei .ekwa-wsei-export-mode label {
+	margin-left: 14px;
+}
+
+.ekwa-wsei .ekwa-wsei-batch-control {
 	background: #f6f7f7;
 	border: 1px solid #dcdcde;
 	border-radius: 4px;
 	padding: 10px 12px;
+}
+
+.ekwa-wsei .ekwa-wsei-batch-control input[type="number"] {
+	margin: 0 6px;
+}
+
+.ekwa-wsei .ekwa-wsei-single-note {
+	margin-top: 6px;
 }
 
 .ekwa-wsei-progress {

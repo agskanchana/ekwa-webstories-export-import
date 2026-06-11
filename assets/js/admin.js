@@ -19,6 +19,7 @@
 
 	ready( function () {
 		setupSelectAll();
+		setupExportMode();
 		setupBatchExport();
 	} );
 
@@ -47,7 +48,29 @@
 		} );
 	}
 
-	// ---- Batched export -----------------------------------------------------
+	// ---- Export mode (single ZIP vs batches) --------------------------------
+	function getExportMode() {
+		var checked = document.querySelector( 'input[name="ekwa-wsei-export-mode"]:checked' );
+		return checked && 'batch' === checked.value ? 'batch' : 'single';
+	}
+
+	// Show the batch-size control only when "Multiple batch ZIPs" is chosen.
+	function setupExportMode() {
+		var radios = document.querySelectorAll( 'input[name="ekwa-wsei-export-mode"]' );
+		var control = document.querySelector( '.ekwa-wsei-batch-control' );
+		if ( ! radios.length || ! control ) {
+			return;
+		}
+		function sync() {
+			control.style.display = 'batch' === getExportMode() ? '' : 'none';
+		}
+		radios.forEach( function ( r ) {
+			r.addEventListener( 'change', sync );
+		} );
+		sync();
+	}
+
+	// ---- Export -------------------------------------------------------------
 	function setupBatchExport() {
 		var form = document.getElementById( 'ekwa-wsei-export-form' );
 		if ( ! form || typeof window.ekwaWsei === 'undefined' ) {
@@ -81,6 +104,14 @@
 		);
 	}
 
+	function chunk( arr, size ) {
+		var out = [];
+		for ( var i = 0; i < arr.length; i += size ) {
+			out.push( arr.slice( i, i + size ) );
+		}
+		return out;
+	}
+
 	function startExport( all ) {
 		var cfg = window.ekwaWsei;
 		var ids = collectIds( all );
@@ -90,16 +121,31 @@
 			return;
 		}
 
+		// Decide how the selection is split into server requests. Single mode =
+		// one ZIP with everything (memory-safe: assets are streamed into the ZIP
+		// on the server, never loaded into PHP memory). Batch mode = several
+		// smaller ZIPs of `size` stories each, built one at a time.
+		var single = 'batch' !== getExportMode();
+		var batches;
+		if ( single ) {
+			batches = [ ids ];
+		} else {
+			var sizeInput = document.getElementById( 'ekwa-wsei-batch-size' );
+			var size = Math.max( 1, parseInt( sizeInput && sizeInput.value, 10 ) || 1 );
+			batches = chunk( ids, size );
+		}
+
 		var progress = document.getElementById( 'ekwa-wsei-export-progress' );
 		var status = progress.querySelector( '.ekwa-wsei-progress-status' );
 		var list = document.getElementById( 'ekwa-wsei-export-downloads' );
-		var redownloadBtn = document.getElementById( 'ekwa-wsei-download-all' );
+		var downloadAllBtn = document.getElementById( 'ekwa-wsei-download-all' );
 		var spinner = document.querySelector( '.ekwa-wsei-spinner' );
 		var buttons = document.querySelectorAll( '#ekwa-wsei-export-btn, #ekwa-wsei-export-all-btn' );
 
 		progress.hidden = false;
 		list.innerHTML = '';
-		redownloadBtn.hidden = true;
+		downloadAllBtn.hidden = true;
+		downloadAllBtn.textContent = single ? cfg.i18n.downloadAgain : cfg.i18n.downloadAllBatches;
 		if ( spinner ) {
 			spinner.classList.add( 'is-active' );
 		}
@@ -107,65 +153,92 @@
 			b.disabled = true;
 		} );
 
-		status.textContent = cfg.i18n.building;
+		var builtUrls = [];
 
-		// All selected stories go into ONE bundle. The build is done server-side
-		// (assets are streamed into the ZIP, so memory stays flat regardless of
-		// how many stories), then the finished file is downloaded — and kept on
-		// the server for ~2 hours so an interrupted download can be re-clicked.
-		var body = new URLSearchParams();
-		body.append( 'action', 'ekwa_wsei_export_batch' );
-		body.append( 'nonce', cfg.nonce );
-		ids.forEach( function ( id ) {
-			body.append( 'story_ids[]', id );
-		} );
-
-		function finish() {
-			if ( spinner ) {
-				spinner.classList.remove( 'is-active' );
+		function buildBatch( index ) {
+			if ( index >= batches.length ) {
+				// Done.
+				if ( spinner ) {
+					spinner.classList.remove( 'is-active' );
+				}
+				buttons.forEach( function ( b ) {
+					b.disabled = false;
+				} );
+				status.textContent = single
+					? cfg.i18n.doneSingle
+					: sprintf( cfg.i18n.doneBatch, builtUrls.length );
+				if ( builtUrls.length > 0 ) {
+					downloadAllBtn.hidden = false;
+				}
+				return;
 			}
-			buttons.forEach( function ( b ) {
-				b.disabled = false;
+
+			status.textContent = single
+				? cfg.i18n.buildingSingle
+				: sprintf( cfg.i18n.buildingBatch, index + 1, batches.length );
+
+			var body = new URLSearchParams();
+			body.append( 'action', 'ekwa_wsei_export_batch' );
+			body.append( 'nonce', cfg.nonce );
+			batches[ index ].forEach( function ( id ) {
+				body.append( 'story_ids[]', id );
 			} );
+
+			fetch( cfg.ajaxUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+				body: body.toString()
+			} )
+				.then( function ( r ) {
+					return r.json();
+				} )
+				.then( function ( res ) {
+					if ( res && res.success ) {
+						var d = res.data;
+						builtUrls.push( d.downloadUrl );
+						addDownloadRow( list, index + 1, d, single );
+						// Download each ZIP as soon as it is built. In batch mode the
+						// builds are seconds apart, so the transfers do not overlap
+						// (overlapping is what truncated the later ZIPs before).
+						triggerDownload( d.downloadUrl );
+					} else {
+						var msg = res && res.data && res.data.message ? res.data.message : 'error';
+						addErrorRow( list, index + 1, msg, single );
+					}
+				} )
+				.catch( function ( err ) {
+					addErrorRow( list, index + 1, String( err ), single );
+				} )
+				.finally( function () {
+					// Small gap between batches keeps downloads from overlapping.
+					setTimeout( function () {
+						buildBatch( index + 1 );
+					}, 600 );
+				} );
 		}
 
-		fetch( cfg.ajaxUrl, {
-			method: 'POST',
-			credentials: 'same-origin',
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-			body: body.toString()
-		} )
-			.then( function ( r ) {
-				return r.json();
-			} )
-			.then( function ( res ) {
-				if ( res && res.success ) {
-					var d = res.data;
-					addDownloadRow( list, d );
-					triggerDownload( d.downloadUrl );
-					status.textContent = cfg.i18n.done;
-					redownloadBtn.hidden = false;
-					redownloadBtn.onclick = function () {
-						triggerDownload( d.downloadUrl );
-					};
-				} else {
-					var msg = res && res.data && res.data.message ? res.data.message : 'error';
-					addErrorRow( list, msg );
-					status.textContent = '';
-				}
-			} )
-			.catch( function ( err ) {
-				addErrorRow( list, String( err ) );
-				status.textContent = '';
-			} )
-			.finally( finish );
+		buildBatch( 0 );
+
+		// Manual "download again" for any transfer that got interrupted. Files
+		// stay on the server for ~2 hours, so re-clicking always works.
+		downloadAllBtn.onclick = function () {
+			builtUrls.forEach( function ( url, i ) {
+				setTimeout( function () {
+					triggerDownload( url );
+				}, i * 2000 );
+			} );
+		};
 	}
 
-	function addDownloadRow( list, data ) {
+	function addDownloadRow( list, num, data, single ) {
 		var cfg = window.ekwaWsei;
 		var li = document.createElement( 'li' );
 		var label = document.createElement( 'span' );
-		label.textContent = sprintf( cfg.i18n.label, data.stories, data.assets ) + ' — ';
+		var text = single
+			? sprintf( cfg.i18n.labelSingle, data.stories, data.assets )
+			: sprintf( cfg.i18n.labelBatch, num, data.stories, data.assets );
+		label.textContent = text + ' — ';
 		var a = document.createElement( 'a' );
 		a.href = data.downloadUrl;
 		a.textContent = cfg.i18n.download + ' (' + data.filename + ')';
@@ -175,11 +248,13 @@
 		list.appendChild( li );
 	}
 
-	function addErrorRow( list, msg ) {
+	function addErrorRow( list, num, msg, single ) {
 		var cfg = window.ekwaWsei;
 		var li = document.createElement( 'li' );
 		li.className = 'ekwa-wsei-error';
-		li.textContent = sprintf( cfg.i18n.failed, msg );
+		li.textContent = single
+			? sprintf( cfg.i18n.failedSingle, msg )
+			: sprintf( cfg.i18n.failedBatch, num, msg );
 		list.appendChild( li );
 	}
 
